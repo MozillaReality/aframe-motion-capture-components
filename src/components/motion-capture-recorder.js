@@ -1,5 +1,7 @@
 /* global AFRAME, THREE */
 
+var TRACKED_CONTROLS_COMPONENT = require('../constants').TRACKED_CONTROLS_COMPONENT;
+
 var EVENTS = {
   axismove: {id: 0, props: ['id', 'axis', 'changed']},
   buttonchanged: {id: 1, props: ['id', 'state']},
@@ -94,7 +96,7 @@ AFRAME.registerComponent('motion-capture-recorder', {
 
   getJSONData: function () {
     var data;
-    var trackedControlsComponent = this.el.components['tracked-controls'];
+    var trackedControlsComponent = this.el.components[TRACKED_CONTROLS_COMPONENT];
     var controller = trackedControlsComponent && trackedControlsComponent.controller;
     if (!this.recordedPoses) { return; }
     data = {

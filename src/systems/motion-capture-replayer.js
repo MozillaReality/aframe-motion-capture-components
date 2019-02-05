@@ -1,3 +1,5 @@
+var TRACKED_CONTROLS_COMPONENT = require('../constants').TRACKED_CONTROLS_COMPONENT;
+
 AFRAME.registerSystem('motion-capture-replayer', {
   init: function () {
     var sceneEl = this.sceneEl;
@@ -5,8 +7,9 @@ AFRAME.registerSystem('motion-capture-replayer', {
     var trackedControlsSystem;
     var trackedControlsTick;
 
-    trackedControlsSystem = sceneEl.systems['tracked-controls'];
-    trackedControlsTick = AFRAME.components['tracked-controls'].Component.prototype.tick;
+    var trackedControlsSystem = sceneEl.systems[TRACKED_CONTROLS_COMPONENT];
+    var trackedControlsTick = AFRAME.components[TRACKED_CONTROLS_COMPONENT].Component.prototype.tick;
+    var trackedControlsComponent = AFRAME.components[TRACKED_CONTROLS_COMPONENT].Component.prototype;
 
     // Gamepad data stored in recording and added here by `motion-capture-replayer` component.
     this.gamepads = [];
@@ -18,15 +21,14 @@ AFRAME.registerSystem('motion-capture-replayer', {
     trackedControlsSystem.throttledUpdateControllerList = this.updateControllerList.bind(this);
 
     // Wrap `tracked-controls` tick.
-    trackedControlsComponent = AFRAME.components['tracked-controls'].Component.prototype;
     trackedControlsComponent.tick = this.trackedControlsTickWrapper;
     trackedControlsComponent.trackedControlsTick = trackedControlsTick;
   },
 
   remove: function () {
     // restore modified objects
-    var trackedControlsComponent = AFRAME.components['tracked-controls'].Component.prototype;
-    var trackedControlsSystem = this.sceneEl.systems['tracked-controls'];
+    var trackedControlsComponent = AFRAME.components[TRACKED_CONTROLS_COMPONENT].Component.prototype;
+    var trackedControlsSystem = this.sceneEl.systems[TRACKED_CONTROLS_COMPONENT];
     trackedControlsComponent.tick = trackedControlsComponent.trackedControlsTick;
     delete trackedControlsComponent.trackedControlsTick;
     trackedControlsSystem.throttledUpdateControllerList = this.throttledUpdateControllerListOriginal;
@@ -43,7 +45,7 @@ AFRAME.registerSystem('motion-capture-replayer', {
   updateControllerList: function (gamepads) {
     var i;
     var sceneEl = this.sceneEl;
-    var trackedControlsSystem = sceneEl.systems['tracked-controls'];
+    var trackedControlsSystem = sceneEl.systems[TRACKED_CONTROLS_COMPONENT];
     gamepads = gamepads || []
     // convert from read-only GamepadList
     gamepads = Array.from(gamepads)

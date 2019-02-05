@@ -32,7 +32,7 @@ AFRAME.registerComponent('avatar-recorder', {
    */
   throttledTick: function () {
     var self = this;
-    var trackedControllerEls = this.el.querySelectorAll('[tracked-controls]');
+    var trackedControllerEls = this.el.querySelectorAll('[' + constants.TRACKED_CONTROLS_COMPONENT + ']');
     this.trackedControllerEls = {};
     trackedControllerEls.forEach(function setupController (trackedControllerEl) {
       if (!trackedControllerEl.id) {

@@ -50,8 +50,8 @@
 
 	// Components.
 	__webpack_require__(1);
-	__webpack_require__(2);
 	__webpack_require__(3);
+	__webpack_require__(4);
 	__webpack_require__(5);
 	__webpack_require__(6);
 
@@ -62,9 +62,11 @@
 
 /***/ }),
 /* 1 */
-/***/ (function(module, exports) {
+/***/ (function(module, exports, __webpack_require__) {
 
 	/* global AFRAME, THREE */
+
+	var TRACKED_CONTROLS_COMPONENT = __webpack_require__(2).TRACKED_CONTROLS_COMPONENT;
 
 	var EVENTS = {
 	  axismove: {id: 0, props: ['id', 'axis', 'changed']},
@@ -160,7 +162,7 @@
 
 	  getJSONData: function () {
 	    var data;
-	    var trackedControlsComponent = this.el.components['tracked-controls'];
+	    var trackedControlsComponent = this.el.components[TRACKED_CONTROLS_COMPONENT];
 	    var controller = trackedControlsComponent && trackedControlsComponent.controller;
 	    if (!this.recordedPoses) { return; }
 	    data = {
@@ -290,6 +292,15 @@
 /* 2 */
 /***/ (function(module, exports) {
 
+	module.exports.LOCALSTORAGE_RECORDINGS = 'avatarRecordings';
+	module.exports.DEFAULT_RECORDING_NAME = 'default';
+	module.exports.TRACKED_CONTROLS_COMPONENT = AFRAME.utils.device.isWebXRAvailable ? 'tracked-controls-webxr' : 'tracked-controls-webvr';
+
+
+/***/ }),
+/* 3 */
+/***/ (function(module, exports) {
+
 	/* global THREE, AFRAME  */
 	AFRAME.registerComponent('motion-capture-replayer', {
 	  schema: {
@@ -394,7 +405,7 @@
 	    if (data.gamepad) {
 	      this.gamepadData = data.gamepad;
 	      el.sceneEl.systems['motion-capture-replayer'].gamepads.push(data.gamepad);
-	      el.emit('gamepadconnected');
+	      el.sceneEl.systems['motion-capture-replayer'].updateControllerList();
 	    }
 
 	    el.emit('replayingstarted');
@@ -508,15 +519,16 @@
 	function applyPose (el, pose) {
 	  el.setAttribute('position', pose.position);
 	  el.setAttribute('rotation', pose.rotation);
+	  el.object3D.updateMatrix()
 	};
 
 
 /***/ }),
-/* 3 */
+/* 4 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	/* global THREE, AFRAME  */
-	var constants = __webpack_require__(4);
+	var constants = __webpack_require__(2);
 	var log = AFRAME.utils.debug('aframe-motion-capture:avatar-recorder:info');
 	var warn = AFRAME.utils.debug('aframe-motion-capture:avatar-recorder:warn');
 
@@ -549,7 +561,7 @@
 	   */
 	  throttledTick: function () {
 	    var self = this;
-	    var trackedControllerEls = this.el.querySelectorAll('[tracked-controls]');
+	    var trackedControllerEls = this.el.querySelectorAll('[' + constants.TRACKED_CONTROLS_COMPONENT + ']');
 	    this.trackedControllerEls = {};
 	    trackedControllerEls.forEach(function setupController (trackedControllerEl) {
 	      if (!trackedControllerEl.id) {
@@ -723,19 +735,11 @@
 
 
 /***/ }),
-/* 4 */
-/***/ (function(module, exports) {
-
-	module.exports.LOCALSTORAGE_RECORDINGS = 'avatarRecordings';
-	module.exports.DEFAULT_RECORDING_NAME = 'default';
-
-
-/***/ }),
 /* 5 */
 /***/ (function(module, exports, __webpack_require__) {
 
 	/* global THREE, AFRAME  */
-	var constants = __webpack_require__(4);
+	var constants = __webpack_require__(2);
 
 	var bind = AFRAME.utils.bind;
 	var error = AFRAME.utils.debug('aframe-motion-capture:avatar-replayer:error');
@@ -1308,7 +1312,9 @@
 
 /***/ }),
 /* 7 */
-/***/ (function(module, exports) {
+/***/ (function(module, exports, __webpack_require__) {
+
+	var TRACKED_CONTROLS_COMPONENT = __webpack_require__(2).TRACKED_CONTROLS_COMPONENT;
 
 	AFRAME.registerSystem('motion-capture-replayer', {
 	  init: function () {
@@ -1317,8 +1323,9 @@
 	    var trackedControlsSystem;
 	    var trackedControlsTick;
 
-	    trackedControlsSystem = sceneEl.systems['tracked-controls'];
-	    trackedControlsTick = AFRAME.components['tracked-controls'].Component.prototype.tick;
+	    var trackedControlsSystem = sceneEl.systems[TRACKED_CONTROLS_COMPONENT];
+	    var trackedControlsTick = AFRAME.components[TRACKED_CONTROLS_COMPONENT].Component.prototype.tick;
+	    var trackedControlsComponent = AFRAME.components[TRACKED_CONTROLS_COMPONENT].Component.prototype;
 
 	    // Gamepad data stored in recording and added here by `motion-capture-replayer` component.
 	    this.gamepads = [];
@@ -1326,12 +1333,21 @@
 	    // Wrap `updateControllerList`.
 	    this.updateControllerListOriginal = trackedControlsSystem.updateControllerList.bind(
 	      trackedControlsSystem);
-	    trackedControlsSystem.updateControllerList = this.updateControllerList.bind(this);
+	    this.throttledUpdateControllerListOriginal = trackedControlsSystem.throttledUpdateControllerList
+	    trackedControlsSystem.throttledUpdateControllerList = this.updateControllerList.bind(this);
 
 	    // Wrap `tracked-controls` tick.
-	    trackedControlsComponent = AFRAME.components['tracked-controls'].Component.prototype;
 	    trackedControlsComponent.tick = this.trackedControlsTickWrapper;
 	    trackedControlsComponent.trackedControlsTick = trackedControlsTick;
+	  },
+
+	  remove: function () {
+	    // restore modified objects
+	    var trackedControlsComponent = AFRAME.components[TRACKED_CONTROLS_COMPONENT].Component.prototype;
+	    var trackedControlsSystem = this.sceneEl.systems[TRACKED_CONTROLS_COMPONENT];
+	    trackedControlsComponent.tick = trackedControlsComponent.trackedControlsTick;
+	    delete trackedControlsComponent.trackedControlsTick;
+	    trackedControlsSystem.throttledUpdateControllerList = this.throttledUpdateControllerListOriginal;
 	  },
 
 	  trackedControlsTickWrapper: function (time, delta) {
@@ -1342,24 +1358,22 @@
 	  /**
 	   * Wrap `updateControllerList` to stub in the gamepads and emit `controllersupdated`.
 	   */
-	  updateControllerList: function () {
+	  updateControllerList: function (gamepads) {
 	    var i;
 	    var sceneEl = this.sceneEl;
-	    var trackedControlsSystem = sceneEl.systems['tracked-controls'];
-
-	    this.updateControllerListOriginal();
+	    var trackedControlsSystem = sceneEl.systems[TRACKED_CONTROLS_COMPONENT];
+	    gamepads = gamepads || []
+	    // convert from read-only GamepadList
+	    gamepads = Array.from(gamepads)
 
 	    this.gamepads.forEach(function (gamepad) {
-	      if (trackedControlsSystem.controllers[gamepad.index]) { return; }
-	      trackedControlsSystem.controllers[gamepad.index] = gamepad;
+	      if (gamepads[gamepad.index]) { return; }
+	      // to pass check in updateControllerListOriginal
+	      gamepad.pose = true;
+	      gamepads[gamepad.index] = gamepad;
 	    });
 
-	    for (i = 0; i < trackedControlsSystem.controllers.length; i++) {
-	      if (trackedControlsSystem.controllers[i]) { continue; }
-	      trackedControlsSystem.controllers[i] = {id: '___', index: -1, hand: 'finger'};
-	    }
-
-	    sceneEl.emit('controllersupdated', undefined, false);
+	    this.updateControllerListOriginal(gamepads);
 	  }
 	});
 
@@ -1369,7 +1383,7 @@
 /***/ (function(module, exports, __webpack_require__) {
 
 	/* global indexedDB */
-	var constants = __webpack_require__(4);
+	var constants = __webpack_require__(2);
 
 	var DB_NAME = 'motionCaptureRecordings';
 	var OBJECT_STORE_NAME = 'recordings';
